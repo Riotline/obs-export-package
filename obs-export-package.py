@@ -2,37 +2,42 @@ import obspython as obs # type: ignore
 import re, json, unicodedata
 
 
-SCRIPT_VER = "0.0.1"
+SCRIPT_VER = "0.0.2"
 suffix = ""
 save_location = ""
+export_button = None
 
 # OBS Scripting Description
 def script_description():
   return f"""<center><h2>Export Package</h2></center>
-            <center><p>Version: {SCRIPT_VER}</p></center>
+            <center><p><b>Version:</b> {SCRIPT_VER}  <b>Author:</b> Riotline</p></center>
             <p>This plugin assists with creating portable packages
-              by organising asset into one folder.</p>"""
+              by exporting out assets into one folder.</p>"""
 
 def script_defaults(settings):
   obs.obs_data_set_default_string(settings, "export_suffix", "EXPORT")
   obs.obs_data_set_default_string(settings, "export_location", "")
 
 def script_properties():
+  global export_button
   props = obs.obs_properties_create()
   obs.obs_properties_add_path(props, "export_location", "Export Location", obs.OBS_PATH_DIRECTORY, "", "")
   obs.obs_properties_add_text(props, "export_suffix", "Export Suffix", obs.OBS_TEXT_DEFAULT)
-  obs.obs_properties_add_button(props, "export_button", "Export Package", lambda props, prop: export_files())
+  export_button = obs.obs_properties_add_button(props, "export_button", "Export Package", lambda props, prop: export_files())
   return props
 
 def script_update(settings):
   global save_location, suffix
   save_location = obs.obs_data_get_string(settings, "export_location")
   suffix = obs.obs_data_get_string(settings, "export_suffix")
+  sources = []
+  for source in obs.obs_enum_sources():
+    print(obs.obs_source_get_name(source), obs.obs_source_get_type(source))
 
-def get_all_source_paths():
+def get_all_source_paths(source_type=obs.OBS_SOURCE_TYPE_INPUT):
     sources = []
     for source in obs.obs_enum_sources():
-        if (obs.obs_source_get_type(source) == obs.OBS_SOURCE_TYPE_INPUT):
+        if (obs.obs_source_get_type(source) == source_type):
           sources.extend(
              re.findall(
                 r'([A-Z]:\/(?:(?:[^<>:\"\/\\|?*]*[^<>:\"\/\\|?*.]\/|..\/)*(?:[^<>:\"\/\\|?*]*[^<>:\"\/\\|?*.]\/?|..\/))?)', 
@@ -62,6 +67,7 @@ def get_export_foldername():
 
 def export_files():
   print(f"Exporting {obs.obs_frontend_get_current_scene_collection()} ({save_location + '/' + get_export_foldername()})...")
+  obs.obs_property_set_enabled(export_button, False)
   sources = get_all_source_paths()
   export_path = f"{save_location}/{get_export_foldername()}"
   
@@ -74,8 +80,12 @@ def export_files():
   dir_check = obs.os_opendir(export_path)
   if not dir_check:
     obs.os_mkdir(export_path)
-  else:
-    obs.os_closedir(dir_check)
+    obs.os_mkdir(f"{export_path}/Audio")
+    obs.os_mkdir(f"{export_path}/Video")
+    obs.os_mkdir(f"{export_path}/Images")
+    obs.os_mkdir(f"{export_path}/Text-Data")
+    obs.os_mkdir(f"{export_path}/Other")
+  obs.os_closedir(dir_check)
   
   # Export each source file to the export path
   for source in sources:
@@ -100,3 +110,5 @@ def export_files():
         print(f"Exported: {source} to {export_path}")
     else:
       print(f"Source file does not exist: {source}")
+
+  obs.obs_property_set_enabled(export_button, True)
