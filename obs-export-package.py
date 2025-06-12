@@ -2,7 +2,7 @@ import obspython as obs # type: ignore
 import re, json, unicodedata
 
 
-SCRIPT_VER = "0.0.3"
+SCRIPT_VER = "0.0.4"
 suffix = ""
 save_location = ""
 export_button = None
@@ -64,6 +64,8 @@ def slugify(value, allow_unicode=False):
   return re.sub(r'[-\s]+', '-', value).strip('-_')
 
 def get_export_foldername():
+  if not suffix:
+    return slugify(obs.obs_frontend_get_current_scene_collection())
   return slugify(f"{obs.obs_frontend_get_current_scene_collection()}-{suffix}")
 
 def save_file(export_path, source, override_category=None):
@@ -93,27 +95,38 @@ def save_file(export_path, source, override_category=None):
     print(f"Source file does not exist: {source}")
 
 def export_files():
+  # Check if save location and export path are set
+  if not save_location:
+    print("Export location is not set.")
+    return
+
   print(f"Exporting {obs.obs_frontend_get_current_scene_collection()} ({save_location + '/' + get_export_foldername()})...")
   obs.obs_property_set_enabled(export_button, False)
   input_sources = get_all_source_paths()
   transition_sources = get_all_source_paths(obs.OBS_SOURCE_TYPE_TRANSITION)
-  export_path = f"{save_location}/{get_export_foldername()}"
+  folder_name = get_export_foldername()
+  export_path = f"{save_location}/{folder_name}"
   
-  # Check if save location and export path are set
-  if not save_location or not export_path:
-    print("Export location is not set.")
-    return
-  
-  # Check if export directory exists, if not create it
-  dir_check = obs.os_opendir(export_path)
-  if not dir_check:
-    obs.os_mkdir(export_path)
-    obs.os_mkdir(f"{export_path}/Audio")
-    obs.os_mkdir(f"{export_path}/Video")
-    obs.os_mkdir(f"{export_path}/Images")
-    obs.os_mkdir(f"{export_path}/Text-Data")
-    obs.os_mkdir(f"{export_path}/Other")
-  obs.os_closedir(dir_check)
+  # Check if export directory exists, if so, increment folder name to avoid clash
+  dir_check = obs.os_opendir(f"{save_location}/{folder_name}")
+  while dir_check:
+    split_folderrname = folder_name.rsplit('-', 1)
+    if split_folderrname[-1].isnumeric():
+      print(f"Export folder already exists: {export_path}. Incrementing folder name to {int(split_folderrname[-1]) + 1}.")
+      folder_name = f"{split_folderrname[0]}-{int(split_folderrname[-1]) + 1}"
+    else :
+      print(f"Export folder already exists: {export_path}. Incrementing folder name to 1.")
+      folder_name = f"{folder_name}-1"
+    export_path = f"{save_location}/{folder_name}"
+    obs.os_closedir(dir_check)
+    dir_check = obs.os_opendir(export_path)
+
+  obs.os_mkdir(export_path)
+  obs.os_mkdir(f"{export_path}/Audio")
+  obs.os_mkdir(f"{export_path}/Video")
+  obs.os_mkdir(f"{export_path}/Images")
+  obs.os_mkdir(f"{export_path}/Text-Data")
+  obs.os_mkdir(f"{export_path}/Other")
   
   # Export each source file to the export path
   for source in input_sources:
