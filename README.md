@@ -14,5 +14,7 @@ This python script assists with organising assets for portable use by collecting
 4. Navigate to the 'Tools' tab and open the 'Scripts' menu
 5. Add the script by clicking '+' and selecting the 'obs-export-package.py' from the downloaded ZIP
 
+Future features intended to be implemented include Scene Collection and Profile exporting at the same time.
+
 ## Support
 Feel free to add issues for feature requests or any bugs that appear.
