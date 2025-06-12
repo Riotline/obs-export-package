@@ -2,7 +2,7 @@ import obspython as obs # type: ignore
 import re, json, unicodedata
 
 
-SCRIPT_VER = "0.0.2"
+SCRIPT_VER = "0.0.3"
 suffix = ""
 save_location = ""
 export_button = None
@@ -12,7 +12,10 @@ def script_description():
   return f"""<center><h2>Export Package</h2></center>
             <center><p><b>Version:</b> {SCRIPT_VER}  <b>Author:</b> Riotline</p></center>
             <p>This plugin assists with creating portable packages
-              by exporting out assets into one folder.</p>"""
+              by exporting out assets into one folder.</p>
+              
+            <p style='color: red'>WARNING: This script MAY cause OBS 
+            to freeze while it is exporting. Do not force close OBS.</p>"""
 
 def script_defaults(settings):
   obs.obs_data_set_default_string(settings, "export_suffix", "EXPORT")
@@ -30,13 +33,11 @@ def script_update(settings):
   global save_location, suffix
   save_location = obs.obs_data_get_string(settings, "export_location")
   suffix = obs.obs_data_get_string(settings, "export_suffix")
-  sources = []
-  for source in obs.obs_enum_sources():
-    print(obs.obs_source_get_name(source), obs.obs_source_get_type(source))
 
 def get_all_source_paths(source_type=obs.OBS_SOURCE_TYPE_INPUT):
     sources = []
-    for source in obs.obs_enum_sources():
+    raw_sources = obs.obs_enum_sources() + obs.obs_frontend_get_transitions()
+    for source in raw_sources:
         if (obs.obs_source_get_type(source) == source_type):
           sources.extend(
              re.findall(
@@ -65,10 +66,37 @@ def slugify(value, allow_unicode=False):
 def get_export_foldername():
   return slugify(f"{obs.obs_frontend_get_current_scene_collection()}-{suffix}")
 
+def save_file(export_path, source, override_category=None):
+  if obs.os_file_exists(source):
+    try:
+      folder_category = ""
+      match obs.os_get_path_extension(source):
+        case ".mp3" | ".wav" | ".ogg" | ".flac" | ".aac" | ".m4a":
+          folder_category = "Audio"
+        case ".mp4" | ".avi" | ".mov" | ".mkv" | "webm" | ".flv" | ".wmv":
+          folder_category = "Video"
+        case ".png" | ".jpg" | ".jpeg" | ".gif" | ".bmp" | ".tiff" | ".webp" | ".svg":
+          folder_category = "Images"
+        case " .json" | ".xml" | ".txt" | ".csv":
+          folder_category = "Text / Data"
+        case _:
+          folder_category = "Other"
+      if override_category:
+        obs.os_mkdir(f"{export_path}/{override_category}")
+        folder_category = override_category
+      obs.os_copyfile(source, f"{export_path}/{folder_category}/{source.split('/')[-1]}")
+    except:
+      print(f"Failed to copy {source} to {export_path}")
+    else:
+      print(f"Exported: {source} to {export_path}")
+  else:
+    print(f"Source file does not exist: {source}")
+
 def export_files():
   print(f"Exporting {obs.obs_frontend_get_current_scene_collection()} ({save_location + '/' + get_export_foldername()})...")
   obs.obs_property_set_enabled(export_button, False)
-  sources = get_all_source_paths()
+  input_sources = get_all_source_paths()
+  transition_sources = get_all_source_paths(obs.OBS_SOURCE_TYPE_TRANSITION)
   export_path = f"{save_location}/{get_export_foldername()}"
   
   # Check if save location and export path are set
@@ -88,27 +116,9 @@ def export_files():
   obs.os_closedir(dir_check)
   
   # Export each source file to the export path
-  for source in sources:
-    if obs.os_file_exists(source):
-      try:
-        folder_category = ""
-        match obs.os_get_path_extension(source):
-          case ".mp3" | ".wav" | ".ogg" | ".flac" | ".aac" | ".m4a":
-            folder_category = "Audio"
-          case ".mp4" | ".avi" | ".mov" | ".mkv" | "webm" | ".flv" | ".wmv":
-            folder_category = "Video"
-          case ".png" | ".jpg" | ".jpeg" | ".gif" | ".bmp" | ".tiff" | ".webp" | ".svg":
-            folder_category = "Images"
-          case " .json" | ".xml" | ".txt" | ".csv":
-            folder_category = "Text / Data"
-          case _:
-            folder_category = "Other"
-        obs.os_copyfile(source, f"{export_path}/{folder_category}/{source.split('/')[-1]}")
-      except:
-        print(f"Failed to copy {source} to {export_path}")
-      else:
-        print(f"Exported: {source} to {export_path}")
-    else:
-      print(f"Source file does not exist: {source}")
+  for source in input_sources:
+    save_file(export_path, source)
 
+  for source in transition_sources:
+    save_file(export_path, source, "Transitions")
   obs.obs_property_set_enabled(export_button, True)
